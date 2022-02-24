@@ -532,3 +532,5 @@ Snakemake tutorial: https://snakemake.readthedocs.io/en/stable/tutorial/tutorial
 
 Snakemake documentation: https://snakemake.readthedocs.io/en/stable/index.html
 
+Slides: https://michael-geuenich.github.io/2022_Toronto_workshop_reproducibility/
+
