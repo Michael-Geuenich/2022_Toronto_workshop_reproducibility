@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="" xml:lang="">
+  <head>
+    <title>With great data come great pipelines:</title>
+    <meta charset="utf-8" />
+    <meta name="author" content="Michael Geuenich" />
+    <script src="libs/header-attrs/header-attrs.js"></script>
+    <link href="libs/remark-css/default.css" rel="stylesheet" />
+    <link href="libs/remark-css/metropolis.css" rel="stylesheet" />
+    <link href="libs/remark-css/tamu-fonts.css" rel="stylesheet" />
+    <link href="libs/tile-view/tile-view.css" rel="stylesheet" />
+    <script src="libs/tile-view/tile-view.js"></script>
+    <link rel="stylesheet" href="custom.css" type="text/css" />
+  </head>
+  <body>
+    <textarea id="source">
+class: center, middle, inverse, title-slide
+
+# With great data come great pipelines:
+## Creating flexible standardized pipelines for common<br/>biomedical analysis tasks using Snakemake
+### Michael Geuenich
+### Lunenfeld Tanenbaum Research Institute
+### 2022/02/24
+
+---
+
+class: black-out
+
+# Biomedical research questions
+
+My work is focussed on cancer-immune relationship
+--
+.pull-left[
+&lt;img src="figures/cancer-t-cells.png" width="500" height="330" /&gt;
+]
+--
+.pull-right[
+## Specific biomedical questions of interest
+   - How many immune cells are present in a cancer biopsy?
+   - What states are the cancer and immune cells in?
+   - What type of variability exists in cancer cells upon perturbation (e.g. chemotherapy treatment)?
+]
+
+---
+
+# Exponential increase in sequencing available
+
+.pull-left[
+&lt;img src="figures/falling-fast-nature.png" width="500" /&gt;
+```
+Source: Nature.com
+```
+]
+
+???
+Moores law = # of transistors on an integrated circuit doubled every other year
+--
+.pull-right[
+### Publicly deposited sequence data (TB)
+&lt;img src="figures/Sra_growth.png" width="700" /&gt;
+```
+Source: ncbiinsights
+```
+]
+
+--
+
+### Datasets of this magnitude require robust processing and analysis pipelines
+
+---
+
+# How not to do reproducible research
+.oneThirdsPullLeft[
+&lt;img src="figures/CR-robot.png" width="300" /&gt;
+```
+Handling robot. Source: protocols.io
+```
+]
+
+.twoThirdsPullRight[
+Obtained ~1,000 sequencing samples from diverse cancer models using this robot.
+{{content}}
+]
+--
+
+- Submitting data cleaning jobs manually.
+
+{{content}}
+
+--
+```
+    for f in data/exp1/*; do sbatch --wrap="command param1 ..."; done
+```
+  
+{{content}}
+???
+  - Five months later you will ask "What parameters did I use again?"
+--
+
+-  Re-write code and commands for each new experiment
+
+{{content}}
+
+--
+
+- Rscripts/functions that accomplished individual tasks, but were not linked to the project
+
+{{content}}
+
+--
+
+### Other issues with this approach
+
+- Changes in upstream steps (e.g. data processing) do not trigger a re-run of subsequent steps
+- Code reusability across experiments was poor
+{{content}}
+
+---
+
+# General desirable characteristics of a pipeline
+
+- Reproducible
+
+  - Setting a seed
+  - Relative paths
+
+--
+- Only write your code once
+
+  - E.g. re-use the same clustering script changing just the clustering parameters
+
+--
+- Tie scripts into a single executable workflow
+
+    - Create a results report at the end
+--
+
+- Automatically re-run workflow sections if there are upstream changes
+```
+      Download data -&gt; cluster data -&gt; create figure
+```
+
+--
+
+- Re-use the same pipeline on different datasets
+
+    - Could be a complex data processing pipeline
+--
+    - Challenge: 99% of the code remains the same, only parameters change
+
+???
+I imagine this list holds quite well outside the biomedical domain too
+
+---
+
+# Concrete biomedical example in single-cell RNA-Sequencing
+
+Single-cell RNA-Sequencing: Sequence individual cells and understand their heterogeneity
+
+--
+   - How many immune cells are present in a cancer biopsy?
+   - What states are the cancer and immune cells in?
+   - What type of variability exists in cancer cells upon perturbation (e.g. chemotherapy treatment)?
+
+--
+
+.pull-left[
+### Concrete biomedical example in single-cell RNA-Sequencing
+
+1. Filter out dead and damaged cells
+
+  - Based on the number of overall reads and percentage of reads from mitochondrial reads
+  - Threshods are very sample dependent: tumour samples have higher % of mitochondrial reads
+  
+]
+
+???
+
+Dead and damaged cells depend on sample preparation.
+
+Because of technical reasons, dead/damaged cells have a higher proportion of dead cells
+
+--
+.pull-right[
+&lt;img src="figures/mito-detected.png" width="357" height="350" /&gt;
+]
+
+---
+
+# General analysis pipeline steps
+
+.pull-left[
+1. Filter out dead/damaged cells
+2. Normalize data
+{{content}}
+]
+--
+3. Cluster cells
+{{content}}
+--
+4. Assign each cluster to cell types based on the expression of certain markers
+{{content}}
+--
+  - Some clusters are impure and contain multiple cell types
+{{content}}
+--
+  - Analysis can be aided by creating scatterplots of specific markers
+{{content}}
+--
+
+## Data dependent parameters
+1. number of detected reads &amp; % mitochondrial reads
+2. clusters that need re-clustering
+3. markers to correlate
+{{content}}
+
+---
+
+# General analysis pipeline steps
+
+.pull-left[
+1. Filter out dead/damaged cells
+2. Normalize data
+3. Cluster cells
+4. Assign each cluster to cell types based on the expression of certain markers
+  - Some clusters are impure and contain multiple cell types
+  - Analysis can be aided by creating scatterplots of specific markers
+
+## Data dependent parameters
+1. number of detected reads &amp; % mitochondrial reads
+2. clusters that need re-clustering
+3. markers to correlate
+]
+
+.pipelineRequirementsBox[
+### Summary of requirements
+- Reproducible
+
+- Create a single executable workflow
+
+- Re-run the same script over different samples/parameters
+
+- Automatically re-run if there are upstream changes
+
+- Reuse the same pipeline despite data-dependent parameter diffences between datasets
+]
+
+---
+
+# Snakemake introduction
+
+**Snakemake is a Python based workflow manager to create reproducible and scalable analyses**
+
+--
+
+Snakemake is based on rules: 
+- Each analysis step can be implemented as a human readable snippet
+--
+
+- Workflows can run on local, cluster or cloud environments without needing to modify the workflow
+
+--
+
+```
+rule plot_amazing_figure:
+  input:
+    data = 'output/data/my-processed-data.csv'
+  output:
+    figure = 'figures/my-amazing-figure.pdf'
+  script:
+    'scripts/make-my-figure.R'
+```
+
+--
+
+- Snippets can be tied together to create a complete workflow
+
+
+???
+- Input
+- Output
+- What generates it
+
+Can list as many input/output files as I like
+
+---
+# Snakemake introduction
+.pull-left[
+```
+rule all:
+  input:
+    'output/data/my-processed-data.csv',
+    'figures/my-amazing-figure.pdf'
+
+rule plot_amazing_figure:
+  input:
+    data = 'output/data/my-processed-data.csv'
+  output:
+    figure = 'figures/my-amazing-figure.pdf'
+  script:
+    'scripts/make-my-figure.R'
+
+rule download_my_data:
+  params:
+    website: 'www.mywebsite.com/my_csvfile.csv'
+  output:
+    csv = 'output/data/my-processed-data.csv'
+  shell:
+    'curl {params.website} -o {output.csv}'
+```
+]
+
+--
+.pull-right[
+&lt;img src="figures/rules.png" width="316" height="400" /&gt;
+]
+
+---
+
+# Executing the same script over multiple samples/parameters
+
+```
+rule all:
+  input:
+    expand('figures/my-amazing-figure-{samples_list}.pdf', samples_list = ['s1', 's2', 's3'])
+```
+
+--
+```
+rule plot_amazing_figure:
+  input:
+    data = 'output/data/my-processed-data-{samples_list}.csv'
+  output:
+    figure = 'figures/my-amazing-figure-{samples_list}.pdf'
+  script:
+    'scripts/make-my-figure.R'
+
+rule download_my_data:
+  params:
+    website: 'www.mywebsite.com/my_csvfile-{samples_list}.csv'
+  output:
+    csv = 'output/data/my-processed-data-{samples_list}.csv'
+  shell:
+    'curl {params.website} -o {output.csv}'
+```
+
+???
+
+Snakemake will also re-run the sample if there have been changes upstream.
+
+Example, say I download my data again, then plotting would run again too
+
+
+If the output of a rule is not specified in rule all, the rule itself will not cause any errors but will also not run
+
+---
+
+# Configuration &amp; conditional rule execution
+
+- A configuration file can easily be added to each Snakefile 
+
+```
+    configfile: 'config.yaml'
+```
+
+--
+
+Good place to keep:
+- File paths to data/software binaries
+- Data filtering parameters
+
+--
+
+## Conditional rule execution
+
+.pull-left[
+```
+checkpoint gene_expression_in_clusters:
+    input:
+        "output/{cluster}.txt"
+    params:
+        config['cluster_parameter']
+    output:
+        "figures/gene1_expression_in_{cluster}.png"
+    script:
+        "plotGeneExpression.R"
+```
+]
+--
+
+.pull-right[
+- Useful when the output is data-dependent and can only be determined after other parts of the workflow have completed
+
+- E.g. Plotting the expression of a gene in all clusters
+{{content}}
+]
+--
+- **Does not work when subsequent results depend on _manual_ inspection of plots**
+
+---
+class: conditionalRule-code
+# Conditional rule execution
+How can we build pipelines that can be reused (e.g. to process a dataset) when steps are 
+1. data dependent and 
+2. require manual inspection of results to determine next steps
+
+--
+
+.oneThirdsPullLeft[
+&lt;img src="figures/mito-detected.png" width="357" height="350" /&gt;
+]
+
+--
+
+```
+configfile: 'my_config.yaml'
+
+my_results_dict = {
+  'downloaded_data': 'output/data/downloaded-data.csv'
+}
+```
+--
+```
+
+if config['dead_cells'] is not None:
+  my_results_dict['my_figure'] = 'processed-data.csv'
+```
+--
+```
+
+rule all:
+  input:
+    my_results_dict.values()
+```
+--
+```
+
+rule process_data:
+  input: 
+...
+```
+
+---
+
+# Create an HTML report
+
+```
+snakemake --report my-amazing-report.html
+```
+--
+
+&lt;img src="figures/Snakemake-report-home.png" width="2501" /&gt;
+
+---
+
+# Snakemake run statistics
+
+&lt;img src="figures/Snakemake-report-statistics.png" width="1672" /&gt;
+
+---
+
+# Snakemake run config
+.center[
+&lt;img src="figures/Snakemake-report-config.png" width="800" /&gt;
+]
+
+---
+
+# Rule outputs
+
+.center[
+&lt;img src="figures/Snakemake-report-rules.png" width="1533" /&gt;
+]
+
+---
+# Summary
+
+- Reproducible
+
+  - Snakemake pipelines can be shared via github
+
+--
+
+- Create a single executable workflow
+
+  - Snakemake ties together individual rules
+
+--
+
+- Re-run the same script over different samples/parameters
+
+  - Can be accomplished with the `expand()` function
+
+--
+
+- Automatically re-run if there are upstream changes
+
+  - Automatically done by Snakemake if files are changed
+
+--
+
+- Reuse the same pipeline despite data-dependent parameter differences between datasets
+
+  - Checkpoints can be used if no human intervention is required
+  - If/else statements can be used to add outputs to `rule all` when parameters must be determined manually
+
+---
+# Resources
+
+Snakemake has support for:
+- Docker containers
+- Conda environments
+- Wrappers for common tools
+- Log outputs
+- HPC specifications (e.g. # of threads or memory)
+
+Snakemake tutorial: https://snakemake.readthedocs.io/en/stable/tutorial/tutorial.html
+
+Snakemake documentation: https://snakemake.readthedocs.io/en/stable/index.html
+
+    </textarea>
+<style data-target="print-only">@media screen {.remark-slide-container{display:block;}.remark-slide-scaler{box-shadow:none;}}</style>
+<script src="https://remarkjs.com/downloads/remark-latest.min.js"></script>
+<script src="macros.js"></script>
+<script>var slideshow = remark.create({
+"ratio": "16:10",
+"highlightStyle": "github",
+"highlightLines": true,
+"countIncrementalSlides": false
+});
+if (window.HTMLWidgets) slideshow.on('afterShowSlide', function (slide) {
+  window.dispatchEvent(new Event('resize'));
+});
+(function(d) {
+  var s = d.createElement("style"), r = d.querySelector(".remark-slide-scaler");
+  if (!r) return;
+  s.type = "text/css"; s.innerHTML = "@page {size: " + r.style.width + " " + r.style.height +"; }";
+  d.head.appendChild(s);
+})(document);
+
+(function(d) {
+  var el = d.getElementsByClassName("remark-slides-area");
+  if (!el) return;
+  var slide, slides = slideshow.getSlides(), els = el[0].children;
+  for (var i = 1; i < slides.length; i++) {
+    slide = slides[i];
+    if (slide.properties.continued === "true" || slide.properties.count === "false") {
+      els[i - 1].className += ' has-continuation';
+    }
+  }
+  var s = d.createElement("style");
+  s.type = "text/css"; s.innerHTML = "@media print { .has-continuation { display: none; } }";
+  d.head.appendChild(s);
+})(document);
+// delete the temporary CSS (for displaying all slides initially) when the user
+// starts to view slides
+(function() {
+  var deleted = false;
+  slideshow.on('beforeShowSlide', function(slide) {
+    if (deleted) return;
+    var sheets = document.styleSheets, node;
+    for (var i = 0; i < sheets.length; i++) {
+      node = sheets[i].ownerNode;
+      if (node.dataset["target"] !== "print-only") continue;
+      node.parentNode.removeChild(node);
+    }
+    deleted = true;
+  });
+})();
+(function() {
+  "use strict"
+  // Replace <script> tags in slides area to make them executable
+  var scripts = document.querySelectorAll(
+    '.remark-slides-area .remark-slide-container script'
+  );
+  if (!scripts.length) return;
+  for (var i = 0; i < scripts.length; i++) {
+    var s = document.createElement('script');
+    var code = document.createTextNode(scripts[i].textContent);
+    s.appendChild(code);
+    var scriptAttrs = scripts[i].attributes;
+    for (var j = 0; j < scriptAttrs.length; j++) {
+      s.setAttribute(scriptAttrs[j].name, scriptAttrs[j].value);
+    }
+    scripts[i].parentElement.replaceChild(s, scripts[i]);
+  }
+})();
+(function() {
+  var links = document.getElementsByTagName('a');
+  for (var i = 0; i < links.length; i++) {
+    if (/^(https?:)?\/\//.test(links[i].getAttribute('href'))) {
+      links[i].target = '_blank';
+    }
+  }
+})();
+// adds .remark-code-has-line-highlighted class to <pre> parent elements
+// of code chunks containing highlighted lines with class .remark-code-line-highlighted
+(function(d) {
+  const hlines = d.querySelectorAll('.remark-code-line-highlighted');
+  const preParents = [];
+  const findPreParent = function(line, p = 0) {
+    if (p > 1) return null; // traverse up no further than grandparent
+    const el = line.parentElement;
+    return el.tagName === "PRE" ? el : findPreParent(el, ++p);
+  };
+
+  for (let line of hlines) {
+    let pre = findPreParent(line);
+    if (pre && !preParents.includes(pre)) preParents.push(pre);
+  }
+  preParents.forEach(p => p.classList.add("remark-code-has-line-highlighted"));
+})(document);</script>
+
+<script>
+slideshow._releaseMath = function(el) {
+  var i, text, code, codes = el.getElementsByTagName('code');
+  for (i = 0; i < codes.length;) {
+    code = codes[i];
+    if (code.parentNode.tagName !== 'PRE' && code.childElementCount === 0) {
+      text = code.textContent;
+      if (/^\\\((.|\s)+\\\)$/.test(text) || /^\\\[(.|\s)+\\\]$/.test(text) ||
+          /^\$\$(.|\s)+\$\$$/.test(text) ||
+          /^\\begin\{([^}]+)\}(.|\s)+\\end\{[^}]+\}$/.test(text)) {
+        code.outerHTML = code.innerHTML;  // remove <code></code>
+        continue;
+      }
+    }
+    i++;
+  }
+};
+slideshow._releaseMath(document);
+</script>
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+(function () {
+  var script = document.createElement('script');
+  script.type = 'text/javascript';
+  script.src  = 'https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-MML-AM_CHTML';
+  if (location.protocol !== 'file:' && /^https?:/.test(script.src))
+    script.src  = script.src.replace(/^https?:/, '');
+  document.getElementsByTagName('head')[0].appendChild(script);
+})();
+</script>
+  </body>
+</html>
