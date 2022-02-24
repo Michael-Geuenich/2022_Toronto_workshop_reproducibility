@@ -169,7 +169,7 @@ Single-cell RNA-Sequencing: Sequence individual cells and understand their heter
 
 1. Filter out dead and damaged cells
 
-  - Based on the number of overall reads and percentage of reads from mitochondrial reads
+  - Based on the number of overall reads and percentage of reads from mitochondrial genes
   - Threshods are very sample dependent: tumour samples have higher % of mitochondrial reads
   
 ]
@@ -211,7 +211,7 @@ knitr::include_graphics("figures/mito-detected.png")
 --
 
 ## Data dependent parameters
-1. number of detected reads & % mitochondrial reads
+1. number of detected reads & % mitochondrial genes
 2. clusters that need re-clustering
 3. markers to correlate
 {{content}}
@@ -229,7 +229,7 @@ knitr::include_graphics("figures/mito-detected.png")
   - Analysis can be aided by creating scatterplots of specific markers
 
 ## Data dependent parameters
-1. number of detected reads & % mitochondrial reads
+1. number of detected reads & % mitochondrial genes
 2. clusters that need re-clustering
 3. markers to correlate
 ]
@@ -534,3 +534,4 @@ Snakemake documentation: https://snakemake.readthedocs.io/en/stable/index.html
 
 Slides: https://michael-geuenich.github.io/2022_Toronto_workshop_reproducibility/
 
+Contact: mgeuenich@lunenfeld.ca
